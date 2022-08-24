@@ -111,6 +111,8 @@ endif ()
 add_compile_definitions(DB_BACKEND="${WITH_DB_BACKEND}")
 target_link_libraries(_duc_lib_stub INTERFACE ${DB_BACKEND_LIB})
 
+find_package(cJSON REQUIRED)
+
 
 set(LIB_DUC_SOURCE
         src/libduc/buffer.c
@@ -133,7 +135,7 @@ set(LIB_DUC_SOURCE
         src/libduc/uthash.h
         src/libduc/utlist.h
         src/libduc/utstring.h
-        )
+        src/libduc/dir.h)
 
 set(DUC_GLAD_SOURCE
         src/glad/glad.c
@@ -175,4 +177,4 @@ file(WRITE ${CMAKE_BINARY_DIR}/config.h)        # Empty. Make include happy
 include_directories(src/libduc src/libduc-graph src/glad)
 
 add_executable(duc ${LIB_DUC_SOURCE} ${DUC_GLAD_SOURCE} ${LIB_DUC_GRAPH_SOURCE} ${DUC_SOURCE})
-target_link_libraries(duc PRIVATE dl m duc::LinkedLibs)
+target_link_libraries(duc PRIVATE dl m duc::LinkedLibs cjson)

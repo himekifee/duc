@@ -9,10 +9,12 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <ctype.h>
+#include <cjson/cJSON.h>
 
 #include "cmd.h"
 #include "duc.h"
 #include "duc-graph.h"
+#include "dir.h"
 
 
 struct param {
@@ -102,7 +104,7 @@ static int hexdigit(char a)
 
 
 void decode_uri(char *src, char *dst)
-{       
+{
 	char a, b;
 	while (*src) {
 		if((*src == '%') && ((a = src[1]) && (b = src[2])) && (isxdigit(a) && isxdigit(b))) {
@@ -477,6 +479,61 @@ void do_tooltip(duc *duc, duc_graph *graph, duc_dir *dir)
 	}
 }
 
+cJSON *dump_json(duc *duc, duc_dir *dir, int depth, off_t min_size, int ex_files) {
+    struct duc_dirent *e;
+    cJSON *self = cJSON_CreateObject();
+    cJSON *children = cJSON_CreateArray();
+
+    struct duc_size size;
+    duc_dir_get_size(dir, &size);
+
+    cJSON_AddStringToObject(self, "name", basename(dir->path));
+    cJSON_AddNumberToObject(self, "count", size.count);
+    cJSON_AddNumberToObject(self, "size_apparent", size.apparent);
+    cJSON_AddNumberToObject(self, "size_actual", size.actual);
+
+    duc_size_type st = opt_apparent ? DUC_SIZE_TYPE_APPARENT : DUC_SIZE_TYPE_ACTUAL;
+
+    while ((e = duc_dir_read(dir, DUC_SIZE_TYPE_ACTUAL, DUC_SORT_SIZE)) != NULL)
+    {
+
+        off_t size = duc_get_size(&e->size, st);
+
+        if (e->type == DUC_FILE_TYPE_DIR && size >= min_size)
+        {
+            duc_dir *dir_child = duc_dir_openent(dir, e);
+            if (dir_child)
+            {
+                cJSON *subdir = dump_json(duc, dir_child, depth--, min_size, ex_files);
+                cJSON_AddItemToArray(children, subdir);
+            }
+            duc_dir_close(dir_child);
+        }
+        else
+        {
+            if (!ex_files && size >= min_size)
+            {
+                cJSON *file = cJSON_CreateObject();
+                cJSON_AddStringToObject(file, "name", e->name);
+                cJSON_AddNumberToObject(file, "size_apparent", e->size.apparent);
+                cJSON_AddNumberToObject(file, "size_actual", e->size.actual);
+                cJSON_AddItemToArray(children, file);
+            }
+        }
+    }
+
+    cJSON_AddItemToObject(self, "children", children);
+    return self;
+}
+
+void do_json(duc *duc, duc_dir *dir) {
+    cJSON *json = dump_json(duc, dir, 4, 0, false);
+    char *out = cJSON_Print(json);
+    printf("%s", out);
+    free(out);
+    cJSON_Delete(json);
+}
+
 
 static int cgi_main(duc *duc, int argc, char **argv)
 {
@@ -513,6 +570,11 @@ static int cgi_main(duc *duc, int argc, char **argv)
 			return -1;
 		}
 	}
+
+    if (strcmp(cmd, "json") == 0) {
+        do_json(duc, dir);
+        return 0;
+    }
 
 	static enum duc_graph_palette palette = 0;
 	
